@@ -3,11 +3,14 @@
 
 namespace GdUnit4.Core.Execution;
 
+using System.Reflection;
 using System.Threading.Tasks;
 
 using Asserts;
 
 using Reporting;
+
+using TestExtensions;
 
 using static Api.ReportType;
 
@@ -31,6 +34,22 @@ internal sealed class TestCaseExecutionStage : ExecutionStage<TestCaseAttribute>
             .ConfigureAwait(true);
         if (context.MemoryPool.OrphanCount > 0)
             context.ReportCollector.PushFront(new TestReport(Warning, context.CurrentTestCase?.Line ?? 0, ReportOrphans(context)));
+    }
+
+    protected override async Task ExecuteStage(ExecutionContext context)
+    {
+        var classLevelCallbacks = context.TestSuite.Instance.GetType().GetCustomAttributes<RegisterGdUnitExtensionAttribute>()
+            .Where(attr => typeof(ITestCaseCallback).IsAssignableFrom(attr.ExtensionType))
+            .Select(attr => (ITestCaseCallback)Activator.CreateInstance(attr.ExtensionType)!);
+        var methodLevelCallbacks = context.CurrentTestCase?.MethodInfo.GetCustomAttributes<RegisterGdUnitExtensionAttribute>()
+            .Where(attr => typeof(ITestCaseCallback).IsAssignableFrom(attr.ExtensionType))
+            .Select(attr => (ITestCaseCallback)Activator.CreateInstance(attr.ExtensionType)!) ?? [];
+        var callbacks = classLevelCallbacks.Concat(methodLevelCallbacks);
+
+        foreach (var callback in callbacks)
+            callback.Execute(context);
+
+        await base.ExecuteStage(context).ConfigureAwait(true);
     }
 
     private static string ReportOrphans(ExecutionContext context) =>

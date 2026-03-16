@@ -13,6 +13,8 @@ using Reporting;
 
 using Signals;
 
+using TestExtensions;
+
 using static Api.ReportType;
 
 internal class AfterTestExecutionStage : ExecutionStage<AfterTestAttribute>
@@ -24,11 +26,22 @@ internal class AfterTestExecutionStage : ExecutionStage<AfterTestAttribute>
 
     public override async Task Execute(ExecutionContext context)
     {
+        var classExtensionCallbacks = context.TestSuite.Instance.GetType()
+            .GetCustomAttributes<RegisterGdUnitExtensionAttribute>()
+            .Where(attr => typeof(IAfterTestCallback).IsAssignableFrom(attr.ExtensionType))
+            .Select(attr => (IAfterTestCallback)Activator.CreateInstance(attr.ExtensionType)!);
+        var methodExtensionCallbacks = context.CurrentTestCase?.MethodInfo.GetCustomAttributes<RegisterGdUnitExtensionAttribute>()
+            .Where(attr => typeof(IAfterTestCallback).IsAssignableFrom(attr.ExtensionType))
+            .Select(attr => (IAfterTestCallback)Activator.CreateInstance(attr.ExtensionType)!) ?? [];
+        var callbacks = classExtensionCallbacks.Concat(methodExtensionCallbacks);
+
         if (!context.IsSkipped)
         {
             if (context.IsEngineMode)
                 GodotSignalCollector.Instance.Clean();
             context.MemoryPool.SetActive(StageName);
+            foreach (var callback in callbacks)
+                callback.AfterTest(context);
             await base
                 .Execute(context)
                 .ConfigureAwait(true);

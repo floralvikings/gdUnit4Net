@@ -11,6 +11,8 @@ using Asserts;
 
 using Reporting;
 
+using TestExtensions;
+
 using static Api.ReportType;
 
 internal class AfterExecutionStage : ExecutionStage<AfterAttribute>
@@ -23,6 +25,13 @@ internal class AfterExecutionStage : ExecutionStage<AfterAttribute>
     public override async Task Execute(ExecutionContext context)
     {
         context.MemoryPool.SetActive(StageName);
+        var callbacks = context.TestSuite.Instance.GetType()
+            .GetCustomAttributes<RegisterGdUnitExtensionAttribute>()
+            .Where(attr => typeof(IAfterCallback).IsAssignableFrom(attr.ExtensionType))
+            .Select(attr => (IAfterCallback)Activator.CreateInstance(attr.ExtensionType)!);
+        foreach (var callback in callbacks)
+            callback.After(context);
+
         await base
             .Execute(context)
             .ConfigureAwait(true);

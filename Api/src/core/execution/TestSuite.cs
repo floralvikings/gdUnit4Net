@@ -7,11 +7,18 @@ using System.Reflection;
 
 using Api;
 
-internal sealed class TestSuite : IDisposable
+/// <summary>
+///     Represents a discovered test suite and its execution metadata.
+/// </summary>
+/// <remarks>
+///     Stores the suite instance, source resource path, and <see cref="TestCase"/> values
+///     used by the execution pipeline.
+/// </remarks>
+public sealed class TestSuite : IDisposable
 {
     private readonly Lazy<IEnumerable<TestCase>> testCases;
 
-    public TestSuite(TestSuiteNode suite)
+    internal TestSuite(TestSuiteNode suite)
         : this(
             FindTypeOnAssembly(suite.AssemblyPath, suite.ManagedType),
             suite.Tests,
@@ -31,20 +38,45 @@ internal sealed class TestSuite : IDisposable
         testCases = new Lazy<IEnumerable<TestCase>>(() => LoadTestCases(type, tests));
     }
 
+    /// <summary>
+    ///     Gets the number of test cases contained in the suite.
+    /// </summary>
     public int TestCaseCount => TestCases.Count();
 
+    /// <summary>
+    ///     Gets the test cases discovered for the suite.
+    /// </summary>
     public IEnumerable<TestCase> TestCases => testCases.Value;
 
-    public string ResourcePath { get; set; }
+    /// <summary>
+    ///     Gets the source resource path of the test suite.
+    /// </summary>
+    public string ResourcePath { get; internal set; }
 
-    public string Name { get; set; }
+    /// <summary>
+    ///     Gets the display name of the test suite.
+    /// </summary>
+    public string Name { get; internal set; }
 
-    public string? FullName => GetType().FullName;
+    /// <summary>
+    ///     Gets the fully qualified name of the suite instance type.
+    /// </summary>
+    public string? FullName => Instance.GetType().FullName;
 
-    public object Instance { get; set; }
+    /// <summary>
+    ///     Gets the instantiated test suite object.
+    /// </summary>
+    public object Instance { get; internal set; }
 
-    public bool FilterDisabled { get; set; }
+    /// <summary>
+    ///     Gets a value indicating whether test filtering is disabled for this suite.
+    /// </summary>
+    public bool FilterDisabled { get; internal set; }
 
+    /// <summary>
+    ///     Disposes the test suite instance when it implements <see cref="IDisposable"/>.
+    ///     Not meant to be called directly.
+    /// </summary>
     public void Dispose()
     {
         if (Instance is IDisposable disposable)

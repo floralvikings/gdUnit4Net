@@ -133,6 +133,20 @@ internal abstract class ExecutionStage<T> : IExecutionStage
         return result.ToString();
     }
 
+    protected virtual async Task ExecuteStage(ExecutionContext context)
+    {
+        var timeout = TimeSpan.FromMilliseconds(StageAttribute?.Timeout ?? DefaultTimeout);
+
+        var task = Method?.Invoke(context.TestSuite.Instance, context.MethodArguments) as Task ?? Task.CompletedTask;
+        var completedTask = await Task
+            .WhenAny(task, Task.Delay(timeout))
+            .ConfigureAwait(true);
+        if (completedTask == task)
+            await task.ConfigureAwait(true); // Propagate exceptions from the original task
+        else
+            throw new ExecutionTimeoutException($"The execution has timed out after {timeout.Humanize()}.", ExecutionLineNumber(context));
+    }
+
     private static int ScanFailureLineNumber(StackTrace stack)
     {
         foreach (var frame in stack.GetFrames().Reverse())
@@ -198,19 +212,6 @@ internal abstract class ExecutionStage<T> : IExecutionStage
             var lineNumber = ScanFailureLineNumber(stack);
             context.ReportCollector.Consume(new TestReport(Failure, lineNumber, exception.Message, TrimStackTrace(stack.ToString())));
         }
-    }
-
-    private async Task ExecuteStage(ExecutionContext context)
-    {
-        var timeout = TimeSpan.FromMilliseconds(StageAttribute?.Timeout ?? DefaultTimeout);
-        var task = Method?.Invoke(context.TestSuite.Instance, context.MethodArguments) as Task ?? Task.CompletedTask;
-        var completedTask = await Task
-            .WhenAny(task, Task.Delay(timeout))
-            .ConfigureAwait(true);
-        if (completedTask == task)
-            await task.ConfigureAwait(true); // Propagate exceptions from the original task
-        else
-            throw new ExecutionTimeoutException($"The execution has timed out after {timeout.Humanize()}.", ExecutionLineNumber(context));
     }
 
     private int ExecutionLineNumber(ExecutionContext context)
